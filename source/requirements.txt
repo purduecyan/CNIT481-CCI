@@ -1,4 +1,0 @@
-# Sphinx packages
-sphinx==4.1.2
-sphinx-prompt==1.4.0
-sphinx_rtd_theme==1.0.0
