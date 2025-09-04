@@ -395,6 +395,148 @@ This will trigger the autoinstall process using the provided cloud-init configur
 
 
 
+.. _cloudinit_vm_cloud_usage:
+
+
+Using Cloud-Init with VMs and Cloud Instances
+=============================================
+
+Cloud-init is widely used to automate the initialization of virtual machines and cloud instances across platforms. It supports a variety of data sources and integrates natively with many cloud providers. It reads configuration from a **data source**, which varies by platform.
+
+.. warning:: 
+
+   The following examples are simplified for clarity. Refer to the official documentation for detailed setup and security considerations.
+
+
+Usage with Virtual Machines
+---------------------------
+
+See :ref:`nocloud_datasource` for usage with ISO images or USB drives.
+
+
+Usage with AWS EC2
+------------------
+
+AWS uses the **EC2** data source, which fetches metadata from the AWS metadata service.
+
+Example: AWS EC2
+^^^^^^^^^^^^^^^^^
+
+1. **Launch an EC2 instance** with a user-data script:
+
+   .. code-block:: yaml
+      :linenos:
+
+      #cloud-config
+      packages:
+        - nginx
+      runcmd:
+        - systemctl enable nginx
+        - systemctl start nginx
+
+2. **Provide user-data** via the AWS console or CLI:
+
+   .. code-block:: bash
+
+      aws ec2 run-instances \
+        --image-id ami-12345678 \
+        --instance-type t2.micro \
+        --user-data file://user-data.yaml
+
+
+Usage with Azure
+----------------
+
+Azure uses the **Azure** data source, which reads metadata from the Azure Instance Metadata Service (IMDS).
+
+Example: Azure VM
+^^^^^^^^^^^^^^^^^^
+
+1. **Create a cloud-init config**:
+
+   .. code-block:: yaml
+      :linenos:
+
+      #cloud-config
+      users:
+        - name: azureuser
+          ssh-authorized-keys:
+            - ssh-rsa AAAAB3Nza...
+
+2. **Deploy VM with cloud-init** using Azure CLI:
+
+.. code-block:: bash
+
+    az vm create \
+      --resource-group myGroup \
+      --name myVM \
+      --image UbuntuLTS \
+      --custom-data cloud-config.yaml
+
+
+Usage with OpenStack
+--------------------
+
+OpenStack uses the **ConfigDrive** or **Metadata Service** data sources.
+
+Example: Injecting user-data via OpenStack CLI
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+1. **Create a cloud-config file**:
+
+   .. code-block:: yaml
+      :linenos:
+
+      #cloud-config
+      users:
+        - name: openstackuser
+          ssh-authorized-keys:
+            - ssh-rsa AAAAB3Nza...
+      runcmd:
+        - echo "OpenStack instance initialized" > /tmp/openstack.txt
+
+2. **Boot an instance with user-data**:
+
+   .. code-block:: bash
+
+      openstack server create \
+        --image ubuntu-22.04 \
+        --flavor m1.small \
+        --key-name mykey \
+        --user-data cloud-config.yaml \
+        --network private-net \
+        openstack-vm
+
+Cloud-init will automatically detect the OpenStack metadata service or ConfigDrive and apply the configuration.
+
+Usage with Google Cloud Platform (GCP)
+--------------------------------------
+
+GCP uses the **GCE** data source, which reads metadata from the GCP metadata server.
+
+Example: Setting startup script via gcloud
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+1. **Create a cloud-config file**:
+
+   .. code-block:: yaml
+      :linenos:
+
+      #cloud-config
+      runcmd:
+        - echo "GCP instance initialized" > /tmp/gcp.txt
+
+2. **Create a VM with metadata**:
+
+   .. code-block:: bash
+
+      gcloud compute instances create gcp-vm \
+        --image-family ubuntu-2204-lts \
+        --image-project ubuntu-os-cloud \
+        --metadata-from-file user-data=cloud-config.yaml
+
+Cloud-init will fetch the ``user-data`` from the GCP metadata server and execute it on first boot.
+
 
 
 Troubleshooting
@@ -421,6 +563,12 @@ Troubleshooting
     3. `Autoinstall configuration reference manual <https://canonical-subiquity.readthedocs-hosted.com/en/latest/reference/autoinstall-reference.html>`_
     4. `Introduction to autoinstall <https://canonical-subiquity.readthedocs-hosted.com/en/latest/intro-to-autoinstall.html>`_
     5. `Cloud-config examples <https://cloudinit.readthedocs.io/en/latest/reference/examples.html>`_
+    6. `OpenStack Cloud-Init Integration <https://docs.openstack.org/nova/latest/admin/metadata-service.html>`_
+    7. `GCP Metadata and Startup Scripts <https://cloud.google.com/compute/docs/startupscript>`_
+    8. `AWS EC2 User Data <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html>`_
+    9. `Azure Cloud-Init Support <https://learn.microsoft.com/en-us/azure/virtual-machines/linux/using-cloud-init>`_
+
+
 
 
 
