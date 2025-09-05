@@ -388,13 +388,6 @@ This will trigger the autoinstall process using the provided cloud-init configur
       * Optional: You can also use ``ds=nocloud;s=/media/usb/`` if using a USB drive with a ``CIDATA`` label.
 
 
-.. seealso::
-
-   1. `Ubuntu Autoinstall Docs <https://ubuntu.com/server/docs/install/autoinstall>`_
-   2.  `Cloud-Init NoCloud Data Source <https://cloudinit.readthedocs.io/en/latest/reference/datasources/nocloud.html>`_
-
-
-
 .. _cloudinit_vm_cloud_usage:
 
 
@@ -560,15 +553,13 @@ Troubleshooting
 
     1. `NoCloud Data Source Documentation <https://cloudinit.readthedocs.io/en/latest/reference/datasources/nocloud.html>`_
     2. `Cloud-Init Official Docs <https://cloudinit.readthedocs.io/en/latest/>`_
-    3. `Autoinstall configuration reference manual <https://canonical-subiquity.readthedocs-hosted.com/en/latest/reference/autoinstall-reference.html>`_
-    4. `Introduction to autoinstall <https://canonical-subiquity.readthedocs-hosted.com/en/latest/intro-to-autoinstall.html>`_
-    5. `Cloud-config examples <https://cloudinit.readthedocs.io/en/latest/reference/examples.html>`_
-    6. `OpenStack Cloud-Init Integration <https://docs.openstack.org/nova/latest/admin/metadata-service.html>`_
-    7. `GCP Metadata and Startup Scripts <https://cloud.google.com/compute/docs/startupscript>`_
-    8. `AWS EC2 User Data <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html>`_
-    9. `Azure Cloud-Init Support <https://learn.microsoft.com/en-us/azure/virtual-machines/linux/using-cloud-init>`_
-
-
-
-
+    3. `Ubuntu Autoinstall Docs <https://ubuntu.com/server/docs/install/autoinstall>`_
+    4. `Cloud-Init NoCloud Data Source <https://cloudinit.readthedocs.io/en/latest/reference/datasources/nocloud.html>`_
+    5. `Autoinstall configuration reference manual <https://canonical-subiquity.readthedocs-hosted.com/en/latest/reference/autoinstall-reference.html>`_
+    6. `Introduction to autoinstall <https://canonical-subiquity.readthedocs-hosted.com/en/latest/intro-to-autoinstall.html>`_
+    7. `Cloud-config examples <https://cloudinit.readthedocs.io/en/latest/reference/examples.html>`_
+    8. `OpenStack Cloud-Init Integration <https://docs.openstack.org/nova/latest/admin/metadata-service.html>`_
+    9. `GCP Metadata and Startup Scripts <https://cloud.google.com/compute/docs/startupscript>`_
+    10. `AWS EC2 User Data <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html>`_
+    11. `Azure Cloud-Init Support <https://learn.microsoft.com/en-us/azure/virtual-machines/linux/using-cloud-init>`_
 
