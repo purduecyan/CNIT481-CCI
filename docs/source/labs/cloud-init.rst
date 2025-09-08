@@ -154,10 +154,19 @@ The configuration hierarchy in ``cloud-init`` can be visualized as follows:
     }
 
 
+Datasources and Provisioning Workflow I
+=======================================
+
+.. important:: 
+
+   For more details on cloud-init datasources, refer to the `Datasources documentation <https://cloudinit.readthedocs.io/en/latest/reference/datasources.html>`_.
+
+
+
 .. _nocloud_datasource:
 
 NoCloud Data Source
-===================
+-------------------
 
 The ``NoCloud`` data source is a generic method for providing ``meta-data`` and ``user-data`` to ``cloud-init``. It is ideal for environments without native cloud metadata services, such as bare-metal servers, virtual machines, or custom provisioning systems.
 
@@ -195,6 +204,7 @@ Example: ``user-data``
 ^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: yaml
+    :linenos:
 
     #cloud-config
     users:
@@ -209,18 +219,16 @@ Example: ``user-data``
 .. important:: The above example is missing the ``autoinstall`` section. For unattended installations, See the :ref:`cloud_init_config`  section.
 
 
-Provisioning Workflow
----------------------
-
 
 NoCloud (local disk): Creating a USB Drive labeled CIDATA
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------------------------------------
 
 To use a USB drive as the NoCloud data source:
 
 1. **Create configuration files**:
 
    .. code-block:: bash
+      :linenos:
 
       mkdir -p /tmp/nocloud
       echo "instance-id: nocloud-001" > /tmp/nocloud/meta-data
@@ -255,13 +263,14 @@ To use a USB drive as the NoCloud data source:
    Cloud-init will detect the ``CIDATA`` volume and apply the configuration.
 
 Alternative: NoCloud (local image): ISO Image
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------------------------
 
 You can also create an ISO image:
 
 1. **Create ISO or directory with required files**:
 
    .. code-block:: bash
+      :linenos:
 
       mkdir -p /tmp/nocloud
       echo "instance-id: nocloud-001" > /tmp/nocloud/meta-data
@@ -291,8 +300,14 @@ You can also create an ISO image:
 
    Cloud-init will detect the NoCloud data source and apply the configuration.
 
+
+.. seealso:: 
+
+    `cloud-localds <https://manpages.debian.org/testing/cloud-image-utils/cloud-localds.1.en.html>`_ - Utility to create NoCloud seed images.
+
+
 NoCloud-Net: Kernel Command Line
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+--------------------------------
 
 To use NoCloud-Net via HTTP:
 
@@ -308,6 +323,7 @@ As an example, to serve the configuration files using a Python HTTP server on po
 1. **Create a directory with configuration files**:
 
    .. code-block:: bash
+      :linenos:
 
       mkdir -p ~/cloud-init-data
       echo "instance-id: nocloud-net-001" > ~/cloud-init-data/meta-data
@@ -363,6 +379,7 @@ Editing GRUB Kernel Line
 4. **Append one of the following to the end of the line**:
 
    .. code-block:: bash
+      :linenos:
 
       # For NoCloud with USB
       autoinstall
@@ -391,8 +408,8 @@ This will trigger the autoinstall process using the provided cloud-init configur
 .. _cloudinit_vm_cloud_usage:
 
 
-Using Cloud-Init with VMs and Cloud Instances
-=============================================
+Datasources and Provisioning Workflow II - VMs and Cloud Instances
+==================================================================
 
 Cloud-init is widely used to automate the initialization of virtual machines and cloud instances across platforms. It supports a variety of data sources and integrates natively with many cloud providers. It reads configuration from a **data source**, which varies by platform.
 
@@ -400,15 +417,14 @@ Cloud-init is widely used to automate the initialization of virtual machines and
 
    The following examples are simplified for clarity. Refer to the official documentation for detailed setup and security considerations.
 
-
-Usage with Virtual Machines
----------------------------
+Virtual Machines
+----------------
 
 See :ref:`nocloud_datasource` for usage with ISO images or USB drives.
 
 
-Usage with AWS EC2
-------------------
+AWS EC2
+-------
 
 AWS uses the **EC2** data source, which fetches metadata from the AWS metadata service.
 
@@ -430,6 +446,7 @@ Example: AWS EC2
 2. **Provide user-data** via the AWS console or CLI:
 
    .. code-block:: bash
+      :linenos:
 
       aws ec2 run-instances \
         --image-id ami-12345678 \
@@ -437,8 +454,8 @@ Example: AWS EC2
         --user-data file://user-data.yaml
 
 
-Usage with Azure
-----------------
+Azure
+-----
 
 Azure uses the **Azure** data source, which reads metadata from the Azure Instance Metadata Service (IMDS).
 
@@ -459,6 +476,7 @@ Example: Azure VM
 2. **Deploy VM with cloud-init** using Azure CLI:
 
 .. code-block:: bash
+    :linenos:
 
     az vm create \
       --resource-group myGroup \
@@ -467,8 +485,8 @@ Example: Azure VM
       --custom-data cloud-config.yaml
 
 
-Usage with OpenStack
---------------------
+OpenStack
+---------
 
 OpenStack uses the **ConfigDrive** or **Metadata Service** data sources.
 
@@ -491,6 +509,7 @@ Example: Injecting user-data via OpenStack CLI
 2. **Boot an instance with user-data**:
 
    .. code-block:: bash
+      :linenos:
 
       openstack server create \
         --image ubuntu-22.04 \
@@ -502,8 +521,8 @@ Example: Injecting user-data via OpenStack CLI
 
 Cloud-init will automatically detect the OpenStack metadata service or ConfigDrive and apply the configuration.
 
-Usage with Google Cloud Platform (GCP)
---------------------------------------
+Google Cloud Platform (GCP)
+---------------------------
 
 GCP uses the **GCE** data source, which reads metadata from the GCP metadata server.
 
@@ -522,6 +541,7 @@ Example: Setting startup script via gcloud
 2. **Create a VM with metadata**:
 
    .. code-block:: bash
+      :linenos:
 
       gcloud compute instances create gcp-vm \
         --image-family ubuntu-2204-lts \
@@ -538,8 +558,14 @@ Troubleshooting
 - Validate cloud-config:
 
   .. code-block:: bash
+     :linenos: 
 
-     cloud-init devel schema --config-file user-data
+     # Without Annotations (for file named user-data)
+     cloud-init schema --config-file user-data
+
+     # With Annotations (for file named config.yml)
+     cloud-init schema -c ./config.yml --annotate
+
 
 - View logs:
 
