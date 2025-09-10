@@ -104,6 +104,80 @@ Autoinstall is implemented as a module within cloud-init. During installation, c
      - No (Ubiquity used)
      - Yes (limited)
 
+
+
+Autoinstall vs Cloud-init Mapping
+--------------------------------- 
+
+The following table maps common autoinstall directives to their cloud-init equivalents, highlighting differences in timing and application:
+
+
+.. list-table:: Autoinstall vs Cloud-init Mapping
+   :header-rows: 1
+   :widths: 25 30 25 20
+
+   * - **Autoinstall Directive**
+     - **Purpose**
+     - **Cloud-init Equivalent**
+     - **Timing**
+   * - ``version``
+     - Schema version for autoinstall
+     - *N/A*
+     - Install-time only
+   * - ``identity`` (hostname, username, password)
+     - Configure system identity
+     - ``hostname``, ``users``
+     - Autoinstall applies during install; Cloud-init applies on first boot
+   * - ``keyboard``
+     - Keyboard layout
+     - ``keyboard`` (via ``locale`` or ``keyboard``)
+     - Install-time
+   * - ``locale``
+     - System locale
+     - ``locale``
+     - Both can set; autoinstall applies earlier
+   * - ``timezone``
+     - System timezone
+     - ``timezone``
+     - Both supported
+   * - ``network``
+     - Netplan config for installer and target
+     - ``network``
+     - Both supported; autoinstall ensures connectivity during install
+   * - ``storage``
+     - Disk partitioning, LVM, ZFS
+     - *No direct equivalent*
+     - Autoinstall only (uses Curtin)
+   * - ``apt``
+     - Mirror, proxy, geoip
+     - ``apt``
+     - Both supported
+   * - ``packages``
+     - Install packages during install
+     - ``packages``
+     - Autoinstall installs in target image; Cloud-init installs after first boot
+   * - ``snaps``
+     - Install snaps during install
+     - ``snap``
+     - Both supported
+   * - ``updates``
+     - Apply updates during install
+     - ``package_update``, ``package_upgrade``
+     - Autoinstall applies before reboot
+   * - ``early-commands``
+     - Commands before partitioning
+     - ``bootcmd`` (similar timing)
+     - Autoinstall runs in installer environment
+   * - ``late-commands``
+     - Commands after install but before reboot
+     - ``runcmd`` (but runs after first boot)
+     - Different timing
+   * - ``user-data``
+     - Embed cloud-init config for target system
+     - Entire cloud-init schema
+     - Runs on first boot
+
+
 Configuration Hierarchy 
 -----------------------
 
