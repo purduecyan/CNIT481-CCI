@@ -115,67 +115,107 @@ The following table maps common autoinstall directives to their cloud-init equiv
 .. list-table:: Autoinstall vs Cloud-init Mapping
    :header-rows: 1
    :widths: 25 30 25 20
+   :class: longtable
 
+   
    * - **Autoinstall Directive**
-     - **Purpose**
      - **Cloud-init Equivalent**
+     - **Purpose**
      - **Timing**
+
    * - ``version``
-     - Schema version for autoinstall
      - *N/A*
+     - Schema version for
+       autoinstall
      - Install-time only
-   * - ``identity`` (hostname, username, password)
-     - Configure system identity
+
+   * - ``identity`` (hostname,
+       username, password)
      - ``hostname``, ``users``
+     - Configure system
+       identity
      - Autoinstall applies during install; Cloud-init applies on first boot
+
    * - ``keyboard``
+     - ``keyboard`` (via
+       ``locale`` or ``keyboard``)
      - Keyboard layout
-     - ``keyboard`` (via ``locale`` or ``keyboard``)
      - Install-time
+
    * - ``locale``
-     - System locale
      - ``locale``
-     - Both can set; autoinstall applies earlier
+     - System locale
+     - Both supported; auto-
+       install applies earlier
+
    * - ``timezone``
-     - System timezone
      - ``timezone``
+     - System timezone
      - Both supported
+
    * - ``network``
-     - Netplan config for installer and target
      - ``network``
-     - Both supported; autoinstall ensures connectivity during install
+     - Netplan config for
+       installer and target
+     - Both supported; auto-
+       install ensures
+       connectivity during
+       install
+
    * - ``storage``
-     - Disk partitioning, LVM, ZFS
      - *No direct equivalent*
-     - Autoinstall only (uses Curtin)
+     - Disk partitioning,
+       LVM, ZFS (via Curtin)
+     - Autoinstall only
+
    * - ``apt``
-     - Mirror, proxy, geoip
      - ``apt``
+     - Mirrors, proxy, geoip
      - Both supported
+
    * - ``packages``
-     - Install packages during install
      - ``packages``
-     - Autoinstall installs in target image; Cloud-init installs after first boot
+     - Install packages during
+       install
+     - Autoinstall installs in
+       target image; cloud-init
+       installs after first boot
+
    * - ``snaps``
-     - Install snaps during install
      - ``snap``
+     - Install snaps during
+       install
      - Both supported
+
    * - ``updates``
-     - Apply updates during install
-     - ``package_update``, ``package_upgrade``
+     - ``package_update``,
+       ``package_upgrade``
+     - Apply updates during
+       install
      - Autoinstall applies before reboot
+
    * - ``early-commands``
-     - Commands before partitioning
-     - ``bootcmd`` (similar timing)
-     - Autoinstall runs in installer environment
+     - ``bootcmd`` (similar
+       timing)
+     - Commands before
+       partitioning
+     - Autoinstall runs in the
+       installer environment
+
    * - ``late-commands``
-     - Commands after install but before reboot
-     - ``runcmd`` (but runs after first boot)
+     - ``runcmd`` (runs on
+       first boot)
+     - Commands after install
+       before reboot
      - Different timing
+
    * - ``user-data``
-     - Embed cloud-init config for target system
-     - Entire cloud-init schema
+     - Full cloud-init schema
+       (embedded)
+     - Embed cloud-init for
+       target system
      - Runs on first boot
+
 
 
 Configuration Hierarchy 
