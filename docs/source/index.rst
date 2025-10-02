@@ -11,6 +11,7 @@ CNIT 481: Cloud Computing Infrastructure
    :caption: Labs
 
    labs/cloud-init
+   labs/vagrant
 
 
 .. toctree::
