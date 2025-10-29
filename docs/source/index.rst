@@ -13,6 +13,7 @@ CNIT 481: Cloud Computing Infrastructure
    labs/cloud-init
    labs/vagrant
    labs/docker
+   labs/docker-compose
 
 
 .. toctree::
