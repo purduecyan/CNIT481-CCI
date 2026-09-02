@@ -1,705 +1,637 @@
-**********
-Cloud-init
-**********
+.. _lab1_cloud_init:
 
+#################################################
+cloud-init — Declarative First-Boot Configuration
+#################################################
 
 .. contents::
    :local:
    :depth: 2
 
+.. note::
 
-Introduction
-============
-
-Cloud-init is a widely used tool for customizing cloud instances during the boot process. It enables automatic configuration of virtual machines by applying user-defined settings such as:
-
-- Setting hostnames
-- Creating users and groups
-- Installing packages
-- Running scripts
-
-Cloud-init supports multiple data sources and is commonly used in all major cloud platforms like AWS, Azure, and OpenStack. It reads configuration from metadata services or configuration files (e.g., ``#cloud-config``) and applies them during instance initialization.
-
-For more information, visit the `cloud-init documentation <https://cloudinit.readthedocs.io/en/latest/>`_.
-
-
-.. _cloud_init_config:
-
-Cloud-Init Configuration
-========================
-
-``cloud-init`` is a powerful tool used to automate the initialization of cloud instances. It reads configuration data from various sources and applies settings during the first boot of a virtual machine.
-
-The configuration is usually provided in a file starting with the header ``#cloud-config``, written in **YAML** format. It supports multiple modules and directives, such as:
-
-- ``users``: Create and configure users
-- ``packages``: Install software packages
-- ``runcmd``: Run shell commands
-- ``write_files``: Create files with specified content
-
-Cloud-init also supports **autoinstall** for unattended OS installations, where configuration is nested under the ``autoinstall`` key.
-
-Example structure:
-
-.. code-block:: yaml
-    :linenos:
-    :caption: Example ``cloud-init`` configuration with autoinstall and user-data
-
-    #cloud-config
-    autoinstall:
-      version: 1
-      packages:
-        - cowsay
-      user-data:
-        users:
-          - name: ciuser
-            sudo: ALL=(ALL) NOPASSWD:ALL
-            shell: /bin/bash
-      runcmd:
-        - echo "Hello from cloud-init!"
-
-
-Cloud-Init vs Autoinstall
-=========================
-
-Cloud-init and autoinstall are both tools used in Ubuntu systems to automate setup, but they serve different purposes and operate at different stages of the provisioning lifecycle.
-
-- **Cloud-init** is used to configure a system *after* it has been installed, typically during the first boot.
-- **Autoinstall** is used to automate the *installation process itself*, including disk partitioning, user creation, and package selection.
-
-Subiquity
----------
-
-Subiquity is the modern installer used in Ubuntu Server editions. It replaces the older Debian-based installer and supports **autoinstall** for fully automated, unattended installations. Subiquity reads configuration from a YAML file embedded in a ``#cloud-config`` document and executes the installation accordingly.
-
-Cloud-Init and Autoinstall Interaction
---------------------------------------
-
-Autoinstall is implemented as a module within cloud-init. During installation, cloud-init processes the ``autoinstall`` section of the configuration file to guide Subiquity through the installation steps. After installation, cloud-init continues to configure the system using the ``user-data`` section on first boot.
-
-
-.. list-table:: Comparison of Autoinstall and Cloud-init
-   :header-rows: 1
-   :widths: 25 25 50
-
-   * - Feature
-     - Autoinstall
-     - Cloud-init
-   * - Purpose
-     - Automates OS installation
-     - Configures system post-install
-   * - Trigger
-     - During installation
-     - On first boot
-   * - Configuration Format
-     - YAML under ``autoinstall`` key
-     - YAML with ``#cloud-config`` header
-   * - Common Use
-     - Ubuntu Server, cloud images
-     - Cloud VMs, custom boot setups
-   * - Supported Installer
-     - Subiquity
-     - Cloud-init engine
-   * - Desktop Support
-     - No (Ubiquity used)
-     - Yes (limited)
-
-
-
-Autoinstall vs Cloud-init Mapping
---------------------------------- 
-
-The following table maps common autoinstall directives to their cloud-init equivalents, highlighting differences in timing and application:
-
-
-.. list-table:: Autoinstall vs Cloud-init Mapping
-   :header-rows: 1
-   :widths: 25 30 25 20
-   :class: longtable
-
+   **Estimated Time:** 3–4 hours.
    
-   * - **Autoinstall Directive**
-     - **Cloud-init Equivalent**
-     - **Purpose**
-     - **Timing**
+   **Environment Versions:** Ubuntu Server 26.04 LTS, cloud-init 24.x, LXD 5.x
+   (or Incus 6.x). Verify the exact versions before
+   you begin.
+   
+   **Note:** cloud-init's datasource names and schema evolve between releases.
 
-   * - ``version``
-     - *N/A*
-     - Schema version for
-       autoinstall
-     - Install-time only
-
-   * - ``identity`` (hostname,
-       username, password)
-     - ``hostname``, ``users``
-     - Configure system
-       identity
-     - Autoinstall applies during install; Cloud-init applies on first boot
-
-   * - ``keyboard``
-     - ``keyboard`` (via
-       ``locale`` or ``keyboard``)
-     - Keyboard layout
-     - Install-time
-
-   * - ``locale``
-     - ``locale``
-     - System locale
-     - Both supported; auto-
-       install applies earlier
-
-   * - ``timezone``
-     - ``timezone``
-     - System timezone
-     - Both supported
-
-   * - ``network``
-     - ``network``
-     - Netplan config for
-       installer and target
-     - Both supported; auto-
-       install ensures
-       connectivity during
-       install
-
-   * - ``storage``
-     - *No direct equivalent*
-     - Disk partitioning,
-       LVM, ZFS (via Curtin)
-     - Autoinstall only
-
-   * - ``apt``
-     - ``apt``
-     - Mirrors, proxy, geoip
-     - Both supported
-
-   * - ``packages``
-     - ``packages``
-     - Install packages during
-       install
-     - Autoinstall installs in
-       target image; cloud-init
-       installs after first boot
-
-   * - ``snaps``
-     - ``snap``
-     - Install snaps during
-       install
-     - Both supported
-
-   * - ``updates``
-     - ``package_update``,
-       ``package_upgrade``
-     - Apply updates during
-       install
-     - Autoinstall applies before reboot
-
-   * - ``early-commands``
-     - ``bootcmd`` (similar
-       timing)
-     - Commands before
-       partitioning
-     - Autoinstall runs in the
-       installer environment
-
-   * - ``late-commands``
-     - ``runcmd`` (runs on
-       first boot)
-     - Commands after install
-       before reboot
-     - Different timing
-
-   * - ``user-data``
-     - Full cloud-init schema
-       (embedded)
-     - Embed cloud-init for
-       target system
-     - Runs on first boot
-
-
-
-Configuration Hierarchy 
------------------------
-
-The configuration hierarchy in ``cloud-init`` can be visualized as follows:
-
-.. graphviz::
-    :align: center
-    :caption: Cloud-init Configuration Structure (autoinstall and user-data sections)
-
-    digraph G {
-        rankdir=TB;
-        compound=true;
-        node [shape=box, style=filled, fillcolor=lightgray, fontname="Helvetica"];
-        edge [dir=none,style=invis]
-
-        subgraph cluster_cloud_init{
-
-            subgraph cluster_autoinstall{
-                rankdir=TB;
-
-                subgraph cluster_autoinstall_directives{
-                    rankdir=TB;
-                    autoinstalldirectives [label="version:\linteractive-sections:\learly-commands:\l", style=filled, fillcolor=lightblue];
-                    label="autoinstall directives:";
-                    style = rounded;
-                    color = blue;
-                }
-                subgraph cluster_userdata{
-                    rankdir=TB;
-                    userdata [label="user-data:\l    users:\l", style=filled, fillcolor=lightpink];
-                    label="user-data directives:";
-                    style = rounded;
-                    color = red;
-                }
-
-                label = "autoinstall:";
-                style = rounded;
-                color = gray;
-            }
-
-            label = "cloud-init";
-            style = rounded;
-            color = black;
-        }
-        autoinstalldirectives -> userdata;
-        
-
-    }
-
-
-Datasources and Provisioning Workflow I
-=======================================
-
-.. important:: 
-
-   For more details on cloud-init datasources, refer to the `Datasources documentation <https://cloudinit.readthedocs.io/en/latest/reference/datasources.html>`_.
-
-
-
-.. _nocloud_datasource:
-
-NoCloud Data Source
--------------------
-
-The ``NoCloud`` data source is a generic method for providing ``meta-data`` and ``user-data`` to ``cloud-init``. It is ideal for environments without native cloud metadata services, such as bare-metal servers, virtual machines, or custom provisioning systems.
 
 Overview
---------
+========
 
-The NoCloud data source supports two modes:
+In cloud-native infrastructure, we do not manually configure machines. We *describe the desired state* of a machine in a declarative document, and the platform realizes that state automatically when the machine boots. Machines become disposable (“cattle, not pets”): if one misbehaves, we destroy it and let the description rebuild an identical replacement.
 
-- **NoCloud (local disk)**: Uses a filesystem (e.g., ISO9660 or VFAT) with a volume label `CIDATA` containing configuration files.
-- **NoCloud (local image)**: Uses a mounted filesystem (e.g., ISO, disk image).
-- **NoCloud-Net**: Fetches data from a remote HTTP server.
+``cloud-init`` <https://cloudinit.readthedocs.io/en/latest/>_ is the industry-standard tool for first-boot configuration. It executes during the initial boot of a virtual machine or container, reads a configuration document ``user-data`` provided by the platform (its **datasource**), and applies settings including user accounts, packages, files, and commands.
 
-Required Files
---------------
+In this exercise, you will:
 
-The following files must be present in the data source:
+* **Create** a declarative specification,
+* Allow the platform to **realize** it automatically, and then
+* **Verify** convergence by demonstrating that the machine has reached the specified state you defined.
 
-- ``meta-data``: Contains instance metadata (hostname, instance-id, etc.).
-- ``user-data``: Contains cloud-config or shell scripts for provisioning.
-
-Optional files:
-
-- ``vendor-data``: Additional configuration from vendor.
-- ``network-config``: Network configuration in YAML format.
-
-Example: ``meta-data``
-^^^^^^^^^^^^^^^^^^^^^^
-
-.. code-block:: yaml
-
-    instance-id: nocloud-instance-001
-    local-hostname: myserver
-
-Example: ``user-data``
-^^^^^^^^^^^^^^^^^^^^^^
-
-.. code-block:: yaml
-    :linenos:
-
-    #cloud-config
-    users:
-      - name: testuser
-        sudo: ALL=(ALL) NOPASSWD:ALL
-        groups: users
-        shell: /bin/bash
-    runcmd:
-      - echo "Provisioning complete" > /var/log/provision.log
+The final assessment (see :ref:`lab1_submission`) evaluates the resulting system state using an automated CI/CD pipeline, rather than the content of your configuration file. This approach embodies the core cloud-native discipline: *Describe*, *Realize*, and *Verify*.
 
 
-.. important:: The above example is missing the ``autoinstall`` section. For unattended installations, See the :ref:`cloud_init_config`  section.
+Learning Objectives
+====================
+
+After completing this exercise you will be able to:
+
+1. Explain, in your own words, the difference between *install-time* configuration (autoinstall) and *first-boot* configuration (cloud-init ``user-data``), and give an example directive from each.
+2. Author a valid ``#cloud-config`` document that creates users with SSH access and correctly managed passwords, installs packages, writes files, and runs
+   commands.
+3. Deliver ``user-data`` to a machine through the **NoCloud** datasource (both a local seed and NoCloud-Net over HTTP) and explain how managed clouds provide the same
+   data automatically.
+4. Verify that a machine converged to its declared state using ``cloud-init status``, ``cloud-init query``, and ``cloud-init analyze``.
+5. Reason about **idempotency** and re-run a configuration cleanly with ``cloud-init clean``.
+6. Diagnose a failed configuration from ``/var/log/cloud-init*.log`` and the schema validator.
 
 
+Prerequisites and Environment
+==============================
 
-NoCloud (local disk): Creating a USB Drive labeled CIDATA
----------------------------------------------------------
+.. important::
 
-To use a USB drive as the NoCloud data source:
+   Complete the exercise using a **single** environment, as it is intentionally single-track. All core walkthrough steps execute locally within an **LXD system container**. This approach eliminates the need for ISO mastering, USB drives, cloud accounts, or cloud-related expenses. LXD delivers ``user-data`` directly to ``cloud-init`` in the same manner as a real cloud environment. The assessment grader utilizes the same engine, ensuring that the local environment aligns with the grading system and maintains development and production parity, which is a key cloud-native principle.
 
-1. **Create configuration files**:
+You need a Linux host with:
 
-   .. code-block:: bash
-      :linenos:
+- LXD 5.x (``sudo snap install lxd``) **or** Incus 6.x
+  (``sudo apt install incus``). The commands below use ``lxc``; for Incus,
+  substitute ``incus`` everywhere.
+- ``cloud-init`` installed on the host for the schema validator
+  (``sudo apt install cloud-init``). You do **not** need cloud-init to run on the
+  host itself — you only use its ``schema`` subcommand there.
+- ``git`` and a text editor.
 
-      mkdir -p /tmp/nocloud
-      echo "instance-id: nocloud-001" > /tmp/nocloud/meta-data
-      echo -e "#cloud-config\nruncmd:\n  - echo Hello > /tmp/hello.txt" > /tmp/nocloud/user-data
+Initialize LXD once:
 
-2. **Create a VFAT filesystem image**:
+.. code-block:: bash
 
-   .. code-block:: bash
+   sudo lxd init --auto
+   # Confirm the Ubuntu image server is reachable:
+   lxc image list ubuntu:26.04
 
-      truncate --size 2M seed.img
-      mkfs.vfat -n CIDATA seed.img
+.. admonition:: Alternative for macOS / Windows
+   :class: tip
 
-3. **Copy configuration files to the image**:
-
-   .. code-block:: bash
-
-      mcopy -oi seed.img /tmp/nocloud/meta-data ::meta-data
-      mcopy -oi seed.img /tmp/nocloud/user-data ::user-data
-
-4. **Write image to USB drive**:
-
-   Identify your USB device (e.g., ``/dev/sdX``) and write the image:
-
-   .. code-block:: bash
-
-      sudo dd if=seed.img of=/dev/sdX bs=4M status=progress && sync
-
-.. warning:: Ensure ``/dev/sdX`` is the correct USB device to avoid data loss.
-
-1. **Boot the target system with the USB drive inserted**:
-
-   Cloud-init will detect the ``CIDATA`` volume and apply the configuration.
-
-Alternative: NoCloud (local image): ISO Image
----------------------------------------------
-
-You can also create an ISO image:
-
-1. **Create ISO or directory with required files**:
-
-   .. code-block:: bash
-      :linenos:
-
-      mkdir -p /tmp/nocloud
-      echo "instance-id: nocloud-001" > /tmp/nocloud/meta-data
-      echo -e "#cloud-config\nruncmd:\n  - echo Hello > /tmp/hello.txt" > /tmp/nocloud/user-data
-
-2. **Create ISO image (optional)**:
-
-   .. code-block:: bash
-
-      genisoimage -output seed.iso -volid cidata -joliet -rock /tmp/nocloud/user-data /tmp/nocloud/meta-data
-
-3. **Attach ISO to VM or mount directory**:
-
-   - For KVM/QEMU:
-
-     .. code-block:: bash
-
-        qemu-system-x86_64 -cdrom nocloud.iso ...
-
-   - For cloud-init testing:
-
-     .. code-block:: bash
-
-        sudo cloud-init single --file /tmp/nocloud/user-data --name runcmd --frequency always
-
-4. **Boot the system**:
-
-   Cloud-init will detect the NoCloud data source and apply the configuration.
+   If you cannot run LXD natively, `Multipass <https://canonical.com/multipass>`_ accepts
+   ``user-data`` with ``multipass launch --cloud-init user-data.yaml`` and behaves
+   almost identically. The core walkthrough notes the Multipass equivalent where
+   it differs. The **autograder still uses LXD**, so prefer LXD if you can.
 
 
-.. seealso:: 
+Concepts 
+========
 
-    `cloud-localds <https://manpages.debian.org/testing/cloud-image-utils/cloud-localds.1.en.html>`_ - Utility to create NoCloud seed images.
+Read this section before writing any YAML. These four ideas explain *why* the rest of the exercise behaves the way it does.
 
+Boot Stages
+-----------
 
-NoCloud-Net: Kernel Command Line
+`cloud-init` does not run all at once. It runs across several **stages** as the
+system boots, so that configuration which needs the network runs after the network
+is up, and so on:
+
+#. **Local** (``init --local``) — before networking; detects the datasource, sets
+   the hostname.
+#. **Network** (``init``) — after networking; fetches remote ``user-data`` if needed.
+#. **Config** (``modules --mode config``) — runs "config" modules (e.g. package
+   installation).
+#. **Final** (``modules --mode final``) — runs late modules such as ``runcmd``
+   and ``write_files`` finalization, then prints the "done" status.
+
+When you run the ``cloud-init status --wait`` command, you are waiting for the **Final**
+stage to complete.
+
+Datasource Detection
+--------------------
+
+A **datasource** is *where the* ``user-data`` *comes from*. On boot, ``cloud-init`` probes a
+list of candidate datasources in order and uses the first that responds. On a
+managed cloud (AWS, Azure, GCP, OpenStack) the matching datasource is detected
+automatically and reads from the platform's metadata service. On bare metal, VMs,
+and containers you provide the data yourself through the **NoCloud** datasource.
+LXD presents ``user-data`` to ``cloud-init`` through the NoCloud datasource for you — which
+is why launching a container with ``-c cloud-init.user-data=...`` "just works".
+
+Modules and Run Frequency
+-------------------------
+
+Each unit of work is a **module** with a **frequency**:
+
+- ``per-instance`` — runs once per unique ``instance-id`` (most modules; e.g. creating users). Re-running ``cloud-init`` will **not** repeat these unless the ``instance-id`` changes or you clean the cached state.
+- ``per-boot`` — runs on every boot (e.g. ``bootcmd``).
+- ``per-once`` — runs exactly once, ever.
+
+This is the single most common source of "why didn't my change apply?" confusion. If you edit user-data and reboot, ``per-instance`` modules will **not** re-run, because ``cloud-init`` remembers it already configured this instance.
+
+Idempotency and ``clean``
+-------------------------
+
+Because most modules are ``per-instance``, ``cloud-init`` is effectively **idempotent** by default: applying the same configuration twice does not create two users. When *you* write imperative steps (``runcmd``), **you** are responsible for keeping them idempotent — a naive ``echo x >> file`` in ``runcmd`` will append a second line if it ever runs twice. 
+
+To force a genuine re-run during development (e.g. to test a fixed config on the same container), reset cloud-init's cached state:
+
+.. code-block:: bash
+
+   # inside the container
+   sudo cloud-init clean --logs   # wipe state + logs; next boot re-runs everything
+   sudo reboot
+
+Configuration Document Structure
 --------------------------------
 
-To use NoCloud-Net via HTTP:
+The relationship between the two nesting contexts you will meet — the installer's ``autoinstall`` block and cloud-init's own ``user-data`` — looks like this:
+
+.. graphviz::
+   :align: center
+   :caption: Where directives live. Installer-time directives sit directly under
+             ``autoinstall``; first-boot directives sit under
+             ``autoinstall.user-data`` (or stand alone in a plain ``#cloud-config``).
+
+   digraph G {
+       rankdir=TB;
+       node [shape=box, style=filled, fillcolor=lightgray, fontname="Arial"];
+
+       subgraph cluster_cloud_init {
+           label = "#cloud-config document";
+           style = rounded; color = black;
+
+           subgraph cluster_autoinstall {
+               label = "autoinstall:  (install-time only — see the Optional appendix)";
+               style = rounded; color = gray;
+
+               ai [label="version:\lidentity:\lstorage:\llate-commands:\l",
+                   fillcolor=lightblue];
+
+               subgraph cluster_userdata {
+                   label = "user-data:  (first boot — the focus of this exercise)";
+                   style = rounded; color = red;
+                   ud [label="users:\lpackages:\lwrite_files:\lruncmd:\l",
+                       fillcolor=lightpink];
+               }
+           }
+       }
+       ai -> ud [style=invis];
+   }
+
+.. tip::
+
+   For the **core** of this exercise you write a *plain* ``#cloud-config`` — just the pink ``user-data`` directives, with no ``autoinstall`` wrapper. The ``autoinstall`` wrapper only matters when you are automating a full OS *installation*, which is the optional appendix.
+
+
+Guided Walkthrough
+==================
+
+This is the spine of the exercise. Do the steps in order. After each step there is a **Checkpoint** — an explicit command whose output tells you the step succeeded. 
+
+.. note::
+   
+   In cloud-native environments, success is always *observed*, never assumed.
+
+Step 0 — Launch a Clean Instance
+--------------------------------
+
+Start with an empty configuration so you can see cloud-init's baseline before you change anything.
 
 .. code-block:: bash
 
-   ds=nocloud-net;s=http://<your-server>/cloud-init/
-
-Ensure the HTTP server serves ``meta-data`` and ``user-data`` files at the root of the specified path.
-
-
-As an example, to serve the configuration files using a Python HTTP server on port 8080:
-
-1. **Create a directory with configuration files**:
-
-   .. code-block:: bash
-      :linenos:
-
-      mkdir -p ~/cloud-init-data
-      echo "instance-id: nocloud-net-001" > ~/cloud-init-data/meta-data
-      echo "#cloud-config\nruncmd:\n - echo Hello from NoCloud-Net > /tmp/hello.txt" > ~/cloud-init-data/user-data
-
-2. **Start Python HTTP server**:
-
-   .. code-block:: bash
-
-      cd ~/cloud-init-data
-      python3 -m http.server 8080
-
-   This will serve files at `http://<your-ip>:8080/`.
-
-3. **Configure kernel command line on target system**:
-
-   Add the following to the boot parameters:
-
-   .. code-block:: bash
-
-      ds=nocloud-net;s=http://<your-ip>:8080/
-
-   Replace ``<your-ip>`` with the IP address of the server running the Python web server.
-
-4. **Boot the target system**:
-
-   Cloud-init will fetch ``meta-data` and ``user-data`` from the specified URL and apply the configuration.
-
-
-
-.. _grub_autoinstall:
-
-Using GRUB to Enable Autoinstall with Cloud-Init
-================================================
-
-To automate OS installation using cloud-init and avoid manual confirmation prompts, you can modify the GRUB boot parameters to include the ``autoinstall`` directive.
-
-This is especially useful when using the **NoCloud** or **NoCloud-Net** data sources for unattended installations.
-
-Editing GRUB Kernel Line
-------------------------
-
-1. **Boot into the installer ISO or PXE environment**.
-
-2. **At the GRUB menu**, press ``e`` to edit the boot entry.
-
-3. **Locate the line starting with** ``linux`` or ``linuxefi``. It typically looks like:
-
-   .. code-block:: bash
-
-      linux /casper/vmlinuz ... quiet --
-
-4. **Append one of the following to the end of the line**:
-
-   .. code-block:: bash
-      :linenos:
-
-      # For NoCloud with USB
-      autoinstall
-      
-      # For NoCloud-Net with HTTP server
-      autoinstall ds=nocloud-net;s=http://<your-server>:<port>/
-
-   Replace ``<your-server>`` and ``<port>`` with the IP address or hostname and the port of the server hosting your ``meta-data`` and ``user-data`` files.
-
-5. **Edited GRUB kernel line example**:
-
-   .. code-block:: bash
-
-      linux /casper/vmlinuz ... quiet autoinstall ds=nocloud-net;s=http://192.168.1.100:8080/ --
-
-6. **Press `Ctrl + X` or `F10`** to boot with the modified parameters.
-
-This will trigger the autoinstall process using the provided cloud-init configuration without any user interaction.
-
-.. important:: 
-      * The ``autoinstall`` keyword is required for Ubuntu Server 20.04+ and other cloud-init enabled installers to bypass confirmation.
-      * Ensure your HTTP server is running and accessible before booting the target system.
-      * Optional: You can also use ``ds=nocloud;s=/media/usb/`` if using a USB drive with a ``CIDATA`` label.
-
-
-.. _cloudinit_vm_cloud_usage:
-
-
-Datasources and Provisioning Workflow II - VMs and Cloud Instances
-==================================================================
-
-Cloud-init is widely used to automate the initialization of virtual machines and cloud instances across platforms. It supports a variety of data sources and integrates natively with many cloud providers. It reads configuration from a **data source**, which varies by platform.
-
-.. warning:: 
-
-   The following examples are simplified for clarity. Refer to the official documentation for detailed setup and security considerations.
-
-Virtual Machines
-----------------
-
-See :ref:`nocloud_datasource` for usage with ISO images or USB drives.
-
-
-AWS EC2
--------
-
-AWS uses the **EC2** data source, which fetches metadata from the AWS metadata service.
-
-Example: AWS EC2
-^^^^^^^^^^^^^^^^^
-
-1. **Launch an EC2 instance** with a user-data script:
-
-   .. code-block:: yaml
-      :linenos:
-
-      #cloud-config
-      packages:
-        - nginx
-      runcmd:
-        - systemctl enable nginx
-        - systemctl start nginx
-
-2. **Provide user-data** via the AWS console or CLI:
-
-   .. code-block:: bash
-      :linenos:
-
-      aws ec2 run-instances \
-        --image-id ami-12345678 \
-        --instance-type t2.micro \
-        --user-data file://user-data.yaml
-
-
-Azure
------
-
-Azure uses the **Azure** data source, which reads metadata from the Azure Instance Metadata Service (IMDS).
-
-Example: Azure VM
-^^^^^^^^^^^^^^^^^^
-
-1. **Create a cloud-init config**:
-
-   .. code-block:: yaml
-      :linenos:
-
-      #cloud-config
-      users:
-        - name: azureuser
-          ssh-authorized-keys:
-            - ssh-rsa AAAAB3Nza...
-
-2. **Deploy VM with cloud-init** using Azure CLI:
+   printf '#cloud-config\n' > user-data.yaml
+   lxc launch ubuntu:26.04 lab1 -c cloud-init.user-data="$(cat user-data.yaml)"
+   lxc exec lab1 -- cloud-init status --wait
+
+**Checkpoint:** ``cloud-init status --wait`` ends with ``status: done``. Inspect
+what cloud-init knows about this instance:
 
 .. code-block:: bash
-    :linenos:
 
-    az vm create \
-      --resource-group myGroup \
-      --name myVM \
-      --image UbuntuLTS \
-      --custom-data cloud-config.yaml
+   lxc exec lab1 -- cloud-init query --all | head -n 20
+   lxc exec lab1 -- cloud-init analyze show | tail -n 15   # per-stage timing
+
+.. note::
+
+   **Multipass equivalent:**
+   ``multipass launch 26.04 --name lab1 --cloud-init user-data.yaml`` then
+   ``multipass exec lab1 -- cloud-init status --wait``.
+
+Step 1 — Create a user with SSH access and a *managed* password
+---------------------------------------------------------------
+
+This is the step where most first-time users get locked out, so read the callout.
+
+.. code-block:: yaml
+   :caption: user-data.yaml
+   :linenos:
+
+   #cloud-config
+   users:
+     - name: ciuser
+       groups: [sudo]
+       shell: /bin/bash
+       sudo: "ALL=(ALL) NOPASSWD:ALL"     # deliberate: passwordless sudo for the exercise
+       lock_passwd: true                   # no usable password — SSH-key login only
+       ssh_authorized_keys:
+         - ssh-ed25519 AAAA...replace-with-your-public-key... you@example
+
+.. warning::
+
+   By default cloud-init **locks the password** of every user it creates
+   (``lock_passwd: true``). That is correct and secure, but it means you cannot log
+   in at the console with a password — you must use the SSH key. If you *need*
+   console password login for testing, set ``lock_passwd: false`` **and** supply a
+   ``hashed_passwd`` (never a plaintext password in a committed file). Generate one
+   with ``openssl passwd -6``. For this exercise, keep ``lock_passwd: true`` and use
+   your SSH key.
+
+Generate a key first if you do not have one
+(``ssh-keygen -t ed25519 -f ~/.ssh/lab1_key``) and paste the ``.pub`` contents.
+
+.. warning::
+
+   Re-apply the configuration on a fresh container (editing ``user-data`` does not re-run ``per-instance`` modules — see :ref:`Idempotency and clean <lab1_cloud_init>`):
+
+.. code-block:: bash
+
+   lxc delete -f lab1
+   lxc launch ubuntu:26.04 lab1 -c cloud-init.user-data="$(cat user-data.yaml)"
+   lxc exec lab1 -- cloud-init status --wait
+
+**Checkpoint:**
+
+.. code-block:: bash
+
+   lxc exec lab1 -- id ciuser
+   lxc exec lab1 -- sudo -l -U ciuser
+   lxc exec lab1 -- getent shadow ciuser   # second field is '!' or '*' when locked
+
+Step 2 — Install a Package and Manage a Service
+-----------------------------------------------
+
+Add ``nginx`` and confirm cloud-init both installs it and leaves the service
+running.
+
+.. code-block:: yaml
+   :caption: add to user-data.yaml
+
+   packages:
+     - nginx
+
+**Checkpoint** (after relaunching as in Step 1):
+
+.. code-block:: bash
+
+   lxc exec lab1 -- systemctl is-enabled nginx
+   lxc exec lab1 -- systemctl is-active nginx
+
+Step 3 — Write a File and Run a Command
+---------------------------------------
+
+Use ``write_files`` for static content and ``runcmd`` for a one-off action. Note
+how the marker command is written to be **idempotent** (it overwrites, it does not
+append):
+
+.. code-block:: yaml
+   :caption: add to user-data.yaml
+
+   write_files:
+     - path: /etc/lab1/motd
+       owner: root:root
+       permissions: "0644"
+       content: |
+         Provisioned by cloud-init for Cloud-Native Infrastructure Lab 1.
+
+   runcmd:
+     - [ mkdir, -p, /var/log/lab1 ]
+     - [ sh, -c, "echo 'Provisioning complete' > /var/log/lab1/provision.log" ]
+
+.. warning::
+
+   ``runcmd`` runs late, as ``root``, once per instance. Prefer the list-of-lists
+   form (each argument a list item) over a single shell string — it avoids quoting
+   surprises. If you must append, guard it so a second run cannot duplicate the
+   line (e.g. ``grep -q MARKER file || echo MARKER >> file``).
+
+**Checkpoint:**
+
+.. code-block:: bash
+
+   lxc exec lab1 -- cat /etc/lab1/motd
+   lxc exec lab1 -- cat /var/log/lab1/provision.log
+
+Step 4 — Prove Idempotency
+--------------------------
+
+Re-run ``cloud-init`` on the *same* container and confirm nothing breaks and nothing
+duplicates:
+
+.. code-block:: bash
+
+   lxc exec lab1 -- cloud-init clean --logs
+   lxc restart lab1
+   lxc exec lab1 -- cloud-init status --wait
+   lxc exec lab1 -- sh -c 'grep -c "Provisioning complete" /var/log/lab1/provision.log'
+
+**Checkpoint:** status is ``done`` and the ``grep -c`` count is exactly ``1``. If it
+is ``2``, your ``runcmd`` is not idempotent — fix it before moving on. This is
+exactly the property the autograder checks.
 
 
-OpenStack
----------
+The NoCloud Datasource, Explained
+=================================
 
-OpenStack uses the **ConfigDrive** or **Metadata Service** data sources.
+In Step 0 LXD quietly acted as your datasource. To understand what real
+provisioning systems do, deliver the *same* ``user-data`` yourself through the
+**NoCloud** datasource — the transport that generalizes to bare-metal installs and
+custom provisioning systems. NoCloud can take its seed either 
 
-Example: Injecting user-data via OpenStack CLI
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1. **Over the network** (from an HTTP server), or 
+2. **From a local labeled volume** such as a USB stick or a seed ISO. 
 
-1. **Create a cloud-config file**:
+You will meet both below; the ``#cloud-config`` document is identical in
+each case — only the delivery changes.
 
-   .. code-block:: yaml
-      :linenos:
+NoCloud needs two files, whichever transport you use:
 
-      #cloud-config
-      users:
-        - name: openstackuser
-          ssh-authorized-keys:
-            - ssh-rsa AAAAB3Nza...
-      runcmd:
-        - echo "OpenStack instance initialized" > /tmp/openstack.txt
+- ``meta-data`` — instance metadata (at minimum an ``instance-id``).
+- ``user-data`` — your ``#cloud-config`` (the same document from the walkthrough).
 
-2. **Boot an instance with user-data**:
+Over the network (HTTP)
+-----------------------
 
-   .. code-block:: bash
-      :linenos:
+Serve the two files with Python's built-in server:
 
-      openstack server create \
-        --image ubuntu-22.04 \
-        --flavor m1.small \
-        --key-name mykey \
-        --user-data cloud-config.yaml \
-        --network private-net \
-        openstack-vm
+.. code-block:: bash
+   :linenos:
 
-Cloud-init will automatically detect the OpenStack metadata service or ConfigDrive and apply the configuration.
+   mkdir -p ~/cloud-init-data
+   printf 'instance-id: nocloud-001\nlocal-hostname: lab1\n' \
+       > ~/cloud-init-data/meta-data
+   # IMPORTANT: use printf (or echo -e) so the newlines are real and
+   # '#cloud-config' is genuinely the first line — a literal '\n' produces an
+   # invalid seed that cloud-init silently rejects.
+   cp user-data.yaml ~/cloud-init-data/user-data
+   ( cd ~/cloud-init-data && python3 -m http.server 8080 )
 
-Google Cloud Platform (GCP)
----------------------------
+.. warning::
 
-GCP uses the **GCE** data source, which reads metadata from the GCP metadata server.
+   The classic beginner bug is ``echo "#cloud-config\nruncmd: ..."`` **without**
+   ``-e``. That writes the literal characters ``\n`` into the file, so the whole
+   document collapses onto one line, ``#cloud-config`` is no longer the first line,
+   and ``cloud-init`` discards it with no obvious error. Always verify with
+   ``head -n1 user-data`` that the first line is exactly ``#cloud-config``.
 
-Example: Setting startup script via gcloud
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+A machine is then pointed at this server through its kernel command line:
 
-1. **Create a cloud-config file**:
+.. code-block:: text
 
-   .. code-block:: yaml
-      :linenos:
+   ds=nocloud;s=http://<your-ip>:8080/
 
-      #cloud-config
-      runcmd:
-        - echo "GCP instance initialized" > /tmp/gcp.txt
+.. note::
 
-2. **Create a VM with metadata**:
+   Recent ``cloud-init`` accepts ``ds=nocloud`` for both local and HTTP seeds and
+   infers the transport from the URL scheme; older releases used a separate
+   ``nocloud-net`` name. Use whichever your pinned version documents — check with
+   ``cloud-init --version`` and the datasource reference.
 
-   .. code-block:: bash
-      :linenos:
+On Bare Metal, from a USB drive
+-------------------------------
 
-      gcloud compute instances create gcp-vm \
-        --image-family ubuntu-2204-lts \
-        --image-project ubuntu-os-cloud \
-        --metadata-from-file user-data=cloud-config.yaml
+A bare-metal machine has no cloud metadata service, and often no network at first
+boot. The classic answer is to hand ``cloud-init`` its seed on **removable media**: a USB
+stick (or a small ISO) whose filesystem is **labelled** ``CIDATA``. During the local
+boot stage ``cloud-init`` probes attached volumes, finds the ``CIDATA`` label, reads
+``user-data`` and ``meta-data`` from it, and provisions the node — no kernel arguments
+and no network required. This is the same NoCloud datasource as above, just delivered
+by disk instead of HTTP.
 
-Cloud-init will fetch the ``user-data`` from the GCP metadata server and execute it on first boot.
+The target node must boot an image that already has ``cloud-init`` installed and that has
+**not yet been initialized** — a fresh Ubuntu cloud or server image, or any system on
+which you have just run ``sudo cloud-init clean --logs``. Give each node a **unique**
+``instance-id`` so ``cloud-init`` treats it as a new instance and runs the
+``per-instance`` modules.
+
+**Step 1 — Prepare the two seed files** (reuse the document from the walkthrough):
+
+.. code-block:: bash
+
+   mkdir -p ~/seed
+   printf 'instance-id: node-0001\nlocal-hostname: node01\n' > ~/seed/meta-data
+   cp user-data.yaml ~/seed/user-data
+   head -n1 ~/seed/user-data          # must print exactly: #cloud-config
+
+**Step 2 — Write the seed onto the USB stick.** Identify the device with great care:
+writing to the wrong disk destroys data.
+
+.. code-block:: bash
+
+   lsblk -o NAME,SIZE,TRAN,MOUNTPOINT      # find your USB, e.g. /dev/sdX
+
+   # Create ONE FAT filesystem labelled CIDATA on the stick — this ERASES it:
+   sudo mkfs.vfat -n CIDATA /dev/sdX1
+
+   sudo mkdir -p /mnt/cidata
+   sudo mount /dev/sdX1 /mnt/cidata
+   sudo cp ~/seed/user-data ~/seed/meta-data /mnt/cidata/
+   sudo umount /mnt/cidata
+   sudo blkid /dev/sdX1                     # confirm: LABEL="CIDATA" TYPE="vfat"
+
+.. admonition:: Alternative — build a CIDATA ISO instead of formatting a stick
+   :class: tip
+
+   ``cloud-localds`` packages the two files into a correctly labelled seed image in
+   one step: ``cloud-localds seed.iso ~/seed/user-data ~/seed/meta-data``. Write that
+   image to a USB with
+   ``sudo dd if=seed.iso of=/dev/sdX bs=4M status=progress oflag=sync`` (again,
+   double-check the device), or attach it directly to a VM as a virtual CD-ROM.
+
+**Step 3 — Provision the node.** Insert the USB into the bare-metal machine and boot
+(or reboot) it. ``cloud-init`` detects the ``CIDATA`` volume during early boot and applies
+your configuration automatically.
+
+**Checkpoint** (run on the node once it has booted):
+
+.. code-block:: bash
+
+   cloud-init status --wait                 # ends with: status: done
+   cloud-id                                 # prints the detected datasource: nocloud
+   sudo cloud-init query --all | grep -iE '"(sub)?platform"'   # shows the seed source
+
+.. warning::
+
+   Treat the stick as a secret. ``user-data`` frequently carries SSH keys, hashed
+   passwords, or tokens, and anyone holding the USB can read them. Remove the media
+   after provisioning, and never put a plaintext password on it — use
+   ``ssh_authorized_keys`` or a ``hashed_passwd`` instead.
+
+.. seealso::
+
+   `NoCloud datasource reference
+   <https://cloudinit.readthedocs.io/en/latest/reference/datasources/nocloud.html>`_
+   and `cloud-localds
+   <https://manpages.debian.org/testing/cloud-image-utils/cloud-localds.1.en.html>`_,
+   a helper that packages ``meta-data`` and ``user-data`` into a seed image for VMs.
 
 
+How this Maps to Clouds Provider Environments
+=============================================
 
-Troubleshooting
-===============
+You will not run these in the lab — they cost money and need accounts. Read them as
+*reference*: every managed cloud provides your ``user-data`` through its own datasource,
+which ``cloud-init`` detects automatically. The document you wrote in the walkthrough
+is portable across all of them; only the delivery mechanism changes.
 
-- Validate cloud-config:
+.. list-table:: The same ``user-data``, delivered by each platform's datasource
+   :header-rows: 1
+   :widths: 20 20 60
 
-  .. code-block:: bash
-     :linenos: 
+   * - Platform
+     - Datasource
+     - How user-data is supplied (reference only — **do not run; incurs cost**)
+   * - Local VM / container
+     - NoCloud
+     - Seed image, or ``-c cloud-init.``user-data``=`` (LXD), or ``--cloud-init`` (Multipass)
+   * - AWS EC2
+     - Ec2
+     - ``aws ec2 run-instances --user-data file://user-data.yaml``
+   * - Azure
+     - Azure (IMDS)
+     - ``az vm create --custom-data user-data.yaml`` (use a current image URN, e.g. ``Canonical:ubuntu-24_04-lts:server:latest``)
+   * - Google Cloud
+     - GCE
+     - ``gcloud compute instances create ... --metadata-from-file user-data=user-data.yaml``
+   * - OpenStack
+     - ConfigDrive / Metadata
+     - ``openstack server create --user-data user-data.yaml ...``
 
-     # Without Annotations (for file named user-data)
-     cloud-init schema --config-file user-data
-
-     # With Annotations (for file named config.yml)
-     cloud-init schema -c ./config.yml --annotate
+The point to internalize: **Write the desired state once. Run it anywhere.** That portability is the payoff of declarative, datasource-agnostic configuration.
 
 
-- View logs:
+.. _lab1_autoinstall_appendix:
 
-  .. code-block:: bash
+Optional Appendix — Automating a full OS install (autoinstall)
+==============================================================
 
-     cat /var/log/cloud-init.log
-     cat /var/log/cloud-init-output.log
+.. admonition:: (Optional) Advanced
+   :class: caution
+
+   Everything above configures a machine that is *already installed*. **Autoinstall**
+   automates the *installation itself* (partitioning, base packages, first user) via
+   Ubuntu's **Subiquity** installer. It is heavier, slower, and hardware-dependent.
+
+Autoinstall is implemented as a ``cloud-init`` module. Its directives live under an
+``autoinstall:`` key; anything you want applied on the *first boot of the installed
+system* goes under ``autoinstall.user-data`` (the ordinary ``#cloud-config`` schema
+you already know).
+
+.. code-block:: yaml
+   :caption: Corrected autoinstall example — note where ``runcmd`` belongs
+   :linenos:
+
+   #cloud-config
+   autoinstall:
+     version: 1
+     packages:
+       - cowsay
+     late-commands:
+       # runs in the installer environment, after install, before first reboot
+       - curtin in-target --target=/target -- systemctl enable cowsay.service || true
+     user-data:            # <-- ordinary cloud-init, runs on the installed system's first boot
+       users:
+         - name: ciuser
+           groups: [sudo]
+           shell: /bin/bash
+           sudo: "ALL=(ALL) NOPASSWD:ALL"
+           lock_passwd: true
+           ssh_authorized_keys:
+             - ssh-ed25519 AAAA...your-key...
+       runcmd:
+         - echo "Hello from first boot" > /var/log/firstboot.log
+
+.. warning::
+
+   **Common mistake this corrects:** ``runcmd`` is *not* an ``autoinstall`` directive.
+   Placing it directly under ``autoinstall:`` (as a sibling of ``version:`` and
+   ``packages:``) is invalid. For installer-time actions use ``late-commands``; for
+   first-boot actions put ``runcmd`` **inside** ``autoinstall.user-data``. Mixing
+   these up is the single most common ``autoinstall`` error and is exactly the timing
+   distinction Objective 1 asks you to explain.
+
+To trigger ``autoinstall`` unattended, append ``autoinstall`` (and, for a remote seed,
+the ``ds=`` parameter) to the installer's GRUB kernel line — press ``e`` at the GRUB
+menu, edit the ``linux /casper/vmlinuz ...`` line, and boot with ``Ctrl+X``:
+
+.. code-block:: text
+
+   linux /casper/vmlinuz ... quiet autoinstall ds=nocloud;s=http://192.168.1.100:8080/ --
+
+.. seealso::
+
+   `Introduction to autoinstall
+   <https://canonical-subiquity.readthedocs-hosted.com/en/latest/intro-to-autoinstall.html>`_
+   and the `autoinstall reference
+   <https://canonical-subiquity.readthedocs-hosted.com/en/latest/reference/autoinstall-reference.html>`_.
+
+
+Troubleshooting and verification reference
+==========================================
+
+Keep this handy — most of these commands are also how you *demonstrate* success,
+not just how you debug failure.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - Command
+     - What it tells you
+   * - ``cloud-init status --wait --long``
+     - Blocks until the Final stage finishes; prints ``done``, ``degraded``, or ``error``.
+   * - ``cloud-init query --all``
+     - The instance metadata and merged config cloud-init actually used.
+   * - ``cloud-init query userdata``
+     - The exact user-data cloud-init received (confirms your document arrived intact).
+   * - ``cloud-init analyze show`` / ``analyze blame``
+     - Per-stage and per-module timing; ``blame`` ranks the slowest modules.
+   * - ``cloud-init schema --config-file user-data.yaml``
+     - Validates your document **before** you boot anything. Run this every time.
+   * - ``cloud-init schema -c user-data.yaml --annotate``
+     - Same, but points at the exact offending lines.
+   * - ``cloud-init clean --logs``
+     - Resets cached state so the next boot re-runs everything (development only).
+   * - ``sudo cat /var/log/cloud-init.log``
+     - The detailed engine log — start here when status is ``error``.
+   * - ``sudo cat /var/log/cloud-init-output.log``
+     - stdout/stderr of ``runcmd`` and package installs — start here when a *command* failed.
+
+A good debugging loop: validate the schema → launch → ``status --wait`` → if not
+``done``, read ``cloud-init.log``; if a command failed, read
+``cloud-init-output.log`` → fix → ``clean --logs`` and relaunch.
+
+
+.. _lab1_submission:
+
+Submission and Assessment
+=========================
+
+Clone the lab template repository available at `cloud-lab-templates <https://github.com/purduecyan/cloud-lab-templates>`_. See the instruction in ``README.md`` in the ``lab1-template`` folder for how to submit your work.
+
+
+.. tip::
+
+   Two requirements are deliberately under-specified in this rubric — the locked
+   password and idempotency. They are not tricks: they follow directly from the
+   *concepts* section. If you understood run frequency and cloud-init's password
+   defaults, you already know what to do.
 
 
 .. seealso::
 
-    1. `NoCloud Data Source Documentation <https://cloudinit.readthedocs.io/en/latest/reference/datasources/nocloud.html>`_
-    2. `Cloud-Init Official Docs <https://cloudinit.readthedocs.io/en/latest/>`_
-    3. `Ubuntu Autoinstall Docs <https://ubuntu.com/server/docs/install/autoinstall>`_
-    4. `Cloud-Init NoCloud Data Source <https://cloudinit.readthedocs.io/en/latest/reference/datasources/nocloud.html>`_
-    5. `Autoinstall configuration reference manual <https://canonical-subiquity.readthedocs-hosted.com/en/latest/reference/autoinstall-reference.html>`_
-    6. `Introduction to autoinstall <https://canonical-subiquity.readthedocs-hosted.com/en/latest/intro-to-autoinstall.html>`_
-    7. `Cloud-config examples <https://cloudinit.readthedocs.io/en/latest/reference/examples.html>`_
-    8. `OpenStack Cloud-Init Integration <https://docs.openstack.org/nova/latest/admin/metadata-service.html>`_
-    9. `GCP Metadata and Startup Scripts <https://cloud.google.com/compute/docs/startupscript>`_
-    10. `AWS EC2 User Data <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html>`_
-    11. `Azure Cloud-Init Support <https://learn.microsoft.com/en-us/azure/virtual-machines/linux/using-cloud-init>`_
-
+   #. `cloud-init official documentation <https://cloudinit.readthedocs.io/en/latest/>`_
+   #. `cloud-config examples <https://cloudinit.readthedocs.io/en/latest/reference/examples.html>`_
+   #. `NoCloud datasource <https://cloudinit.readthedocs.io/en/latest/reference/datasources/nocloud.html>`_
+   #. `Ubuntu autoinstall <https://canonical-subiquity.readthedocs-hosted.com/en/latest/>`_
+   #. `LXD instance configuration (cloud-init keys) <https://documentation.ubuntu.com/lxd/en/latest/cloud-init/>`_
