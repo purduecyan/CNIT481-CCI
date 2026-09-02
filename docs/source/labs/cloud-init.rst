@@ -1,8 +1,8 @@
 .. _lab1_cloud_init:
 
-#################################################
-cloud-init — Declarative First-Boot Configuration
-#################################################
+##########
+cloud-init
+##########
 
 .. contents::
    :local:
