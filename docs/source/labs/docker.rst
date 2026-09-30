@@ -17,11 +17,78 @@ Alternatively, containerd is an industry-standard core container runtime that pr
 Environment
 ===========
 
+These labs target **Ubuntu 26.04** with Docker Engine and the **Buildx** and
+**Compose** plugins. If Docker is already installed and working, skip ahead to
+:ref:`verify_docker`.
+
+Install Docker Engine (Ubuntu 26.04)
+------------------------------------
+
+Install from Docker's official APT repository (not the older ``docker.io`` snap or
+distro package) so that you get a current **Buildx**, which the multi-architecture
+module and the capstone both require.
+
+.. code-block:: bash
+    :linenos:
+
+    # 1. Remove any distro-packaged container tooling that could conflict
+    for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do
+        sudo apt-get remove -y "$pkg" 2>/dev/null || true
+    done
+
+    # 2. Add Docker's official GPG key and APT repository
+    sudo apt-get update
+    sudo apt-get install -y ca-certificates curl
+    sudo install -m 0755 -d /etc/apt/keyrings
+    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+        -o /etc/apt/keyrings/docker.asc
+    sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+    # Key the repo to your Ubuntu codename automatically
+    . /etc/os-release
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+    https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
+        | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    # 3. Install Engine, CLI, containerd, and the Buildx/Compose plugins
+    sudo apt-get update
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io \
+        docker-buildx-plugin docker-compose-plugin
+
+    # 4. Run Docker as your user (activate the new group with `newgrp docker`,
+    #    or simply log out and back in)
+    sudo usermod -aG docker "$USER"
+    sudo systemctl enable --now docker
+
+.. note::
+
+   Docker publishes its APT repository per Ubuntu **codename**. If
+   ``download.docker.com`` does not yet serve packages for the 26.04 codename at the
+   time you install, either (a) replace ``${VERSION_CODENAME}`` above with the most
+   recent LTS codename Docker supports, or (b) use Ubuntu's own packages instead:
+   ``sudo apt-get install -y docker.io docker-buildx docker-compose-v2``. Both paths
+   give you Engine **and** Buildx; every lab here needs only ``docker`` and
+   ``docker buildx``.
+
+.. tip::
+
+   Adding your user to the ``docker`` group grants root-equivalent access to the host.
+   If you would rather avoid that, install **rootless** Docker
+   (``sudo apt-get install -y docker-ce-rootless-extras`` then
+   ``dockerd-rootless-setuptool.sh install``). Rootless mode runs the daemon as your
+   own user and fits the security theme of these labs.
+
+.. _verify_docker:
+
+Verify your installation
+------------------------
+
 .. code-block:: bash
     :linenos:
 
     docker version
     docker info                     # quick peek of your environment
+    docker buildx version           # confirm Buildx is present (needed later)
     docker run --rm hello-world     # confirm basic run works
 
 If any command fails, ensure the Docker daemon is running and your user has permission to access the Docker socket.
@@ -270,18 +337,32 @@ Refactor to separate build and runtime:
     :linenos:
     :caption: Dockerfile (multi-stage)
 
-    # syntax=docker/dockerfile:1.19.0
+    # syntax=docker/dockerfile:1
     FROM python:3.13-slim AS base
     WORKDIR /app
     COPY server.py .
 
-    FROM gcr.io/distroless/python3-debian12 AS runtime
+    # Distroless runtime: no shell, no package manager, minimal attack surface.
+    # The ':nonroot' tag runs as an unprivileged user (uid 65532) by default.
+    FROM gcr.io/distroless/python3-debian12:nonroot AS runtime
     WORKDIR /app
     COPY --from=base /app/server.py /app/server.py
+    USER nonroot
     ENV PORT=8000
     EXPOSE 8000
     ENTRYPOINT ["/usr/bin/python3", "/app/server.py"]
 
+.. note::
+
+   This sample app has no compile or bundling step, so the ``base`` stage only stages
+   a file — here the size win comes almost entirely from the **distroless** runtime
+   (no shell, no ``apt``, few libraries), and the image now also runs **non-root**.
+   Multi-stage builds pay off most when the build stage produces artifacts you then
+   throw away: compilers, ``node_modules``, or — as in the :ref:`capstone
+   <docsy_capstone>` — a full Sphinx toolchain that renders static HTML you copy into
+   a tiny web server. Note also that ``distroless/python3-debian12`` ships Python
+   3.11; it runs this stdlib-only server fine, but for real apps pin the runtime
+   Python deliberately rather than assuming it matches the build stage.
 
 Build & compare sizes:
 
@@ -312,7 +393,7 @@ Tagging, Labels, Digests, Healthcheck
     ENV PORT=8000
     EXPOSE 8000
     HEALTHCHECK --interval=10s --timeout=2s --retries=3 \
-        CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000', timeout=1).read() or exit(1)"
+        CMD python -c "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000', timeout=1).status == 200 else 1)"
     CMD ["python", "server.py"]
 
 
@@ -569,7 +650,7 @@ Enable Buildx and Binfmt
 Build for linux/amd64 and linux/arm64
 -------------------------------------
 
-Use the ``app`` from Module 2 or create a fresh minimal sample.
+Use the ``app`` directory from the *Working with Dockerfile* section (or create a fresh minimal sample).
 
 .. code-block:: bash
     :linenos:
@@ -728,3 +809,257 @@ Troubleshooting
 * **Permission denied on bind mount**: check path exists and permissions; on SELinux systems, consider adding context options (e.g., ``:Z``).
 * **DNS resolution between containers** works only on **user-defined** networks (not the default ``bridge`` with container names).
 * **QEMU/binfmt not installed**: run ``tonistiigi/binfmt`` helper and re-bootstrap the builder.
+* **Buildx cannot** ``--push`` **a multi-arch image to Docker Hub**: authenticate first with ``docker login``, and confirm you are building with a ``docker-container`` builder (created via ``docker buildx create``), not the default ``docker`` driver, which cannot emit multi-platform manifests.
+* **Sphinx build fails with a git error**: the Docsy ``sphinx_git`` extension reads commit history, so the build context must include the repository's ``.git`` directory (clone with full history, not just the files).
+
+
+.. _docsy_capstone:
+
+Capstone Assignment: Containerize and Publish Docsy
+===================================================
+
+This capstone ties the whole tutorial together. You will containerize a real
+documentation site — **Docsy** (https://github.com/purduecyan/docsy) — first as a
+naive single-stage image and then as a lean, security-hardened multi-stage image,
+and publish both to Docker Hub as **multi-architecture** images.
+
+About the application
+---------------------
+
+Despite the name, this Docsy is **not** a Hugo theme — it is a `Sphinx
+<https://www.sphinx-doc.org/>`_ documentation project managed with the `uv
+<https://docs.astral.sh/uv/>`_ Python package manager. Building it produces a
+directory of **static HTML** that any web server can serve. The facts you need:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 32 68
+
+   * - Property
+     - Value
+   * - Language / toolchain
+     - Python (``requires-python >= 3.13``); dependencies pinned in ``uv.lock``
+   * - Documentation source
+     - ``docs/source/`` (Sphinx, ``sphinx_rtd_theme``)
+   * - Build command
+     - ``make -C docs html`` (equivalently ``sphinx-build -b html docs/source docs/build/html``)
+   * - Build output
+     - ``docs/build/html/`` — a self-contained static site (~10 MB)
+   * - Build-time system deps
+     - ``git`` **with full history** (the ``sphinx_git`` extension) and ``graphviz`` (the ``dot`` binary, for diagram directives)
+
+.. important::
+
+   The static HTML is the *only* thing your runtime image needs to serve the site.
+   The Python interpreter, Sphinx, uv, git, and graphviz are **build-time only** —
+   none of them belong in the final image. That gap between what you need to *build*
+   and what you need to *run* is exactly what a multi-stage build exploits.
+
+Reproduce the build locally first (outside Docker) so you understand what the
+container must do:
+
+.. code-block:: bash
+    :linenos:
+
+    git clone https://github.com/purduecyan/docsy.git
+    cd docsy
+    uv sync                       # create venv + install the Sphinx toolchain from uv.lock
+    uv run make -C docs html      # renders the site into docs/build/html
+    ls docs/build/html/index.html
+
+Requirements
+------------
+
+**Part 1 — Build a container that serves Docsy.**
+
+1. The container serves the built Docsy site over HTTP. You may use any lightweight
+   web server (e.g., ``nginx``, ``caddy``, ``busybox httpd``, or another static-file
+   server).
+2. Use a **multi-stage** build: one stage renders the Sphinx HTML; the final stage
+   serves it and contains **none** of the build toolchain.
+3. The final stage runs as a **non-root** user.
+4. Build for **multiple architectures** (at least ``linux/amd64`` and
+   ``linux/arm64``) using ``docker buildx``.
+
+**Part 2 — Publish to Docker Hub.**
+
+Push two tagged versions to your Docker Hub repository
+(``<your-dockerhub-user>/docsy``):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 85
+
+   * - Tag
+     - What it must contain
+   * - ``v1.0.0``
+     - A **single-stage** image that builds and serves Docsy — functional, but fat
+       (the build tools stay in the image). This is your "before".
+   * - ``v2.0.0``
+     - The **multi-stage**, minimal, **non-root**, security-hardened image. This is
+       your "after".
+   * - ``latest``
+     - Points at the same image as ``v2.0.0``.
+
+Every pushed image must be multi-architecture (amd64 **and** arm64).
+
+Guidance and scaffolding
+------------------------
+
+You have already met every technique you need earlier in this tutorial; the capstone
+just combines them. Below is scaffolding — **not a complete solution**. The ``TODO``
+markers are yours to finish.
+
+*Prepare Buildx once:*
+
+.. code-block:: bash
+    :linenos:
+
+    docker run --privileged --rm tonistiigi/binfmt --install all   # QEMU emulation
+    docker buildx create --name multi --use || docker buildx use multi
+    docker buildx inspect --bootstrap
+    docker login                                                   # authenticate to Docker Hub
+
+*Skeleton for* ``v1.0.0`` *(single stage — intentionally not minimal):*
+
+.. code-block:: dockerfile
+    :linenos:
+    :caption: Dockerfile.v1
+
+    # syntax=docker/dockerfile:1
+    FROM python:3.13-slim
+    # TODO: install build-time system deps (git, graphviz) and uv
+    # TODO: COPY the repository in (including .git), then `uv sync` and
+    #       `uv run make -C docs html`
+    # TODO: serve docs/build/html over HTTP (e.g. `python -m http.server`)
+    # Reflect: how large is this image, and which build tools are still inside it?
+
+*Skeleton for* ``v2.0.0`` *(multi-stage, hardened):*
+
+.. code-block:: dockerfile
+    :linenos:
+    :caption: Dockerfile.v2
+
+    # syntax=docker/dockerfile:1
+
+    # ---- Stage 1: build the static site ----
+    FROM python:3.13-slim AS build
+    # TODO: install git + graphviz + uv; COPY the repo (with .git);
+    #       run `uv sync` and `uv run make -C docs html`
+
+    # ---- Stage 2: serve it ----
+    FROM <lightweight, non-root web server>  AS runtime
+    # TODO: COPY --from=build the docs/build/html into the server's web root
+    # TODO: ensure the process runs as a NON-ROOT user
+    # TODO: EXPOSE the port your server listens on
+
+.. tip::
+
+   The cleanest way to satisfy the non-root requirement without extra ``useradd``
+   plumbing is a base image that is already unprivileged, such as
+   ``nginxinc/nginx-unprivileged`` (serves ``/usr/share/nginx/html`` on port **8080**
+   as uid 101) or ``caddy``. If you use stock ``nginx`` instead, you must add a
+   non-root user and adjust its writable directories and listen port yourself.
+
+Build and push multi-arch, with the required tags:
+
+.. code-block:: bash
+    :linenos:
+
+    APP=<your-dockerhub-user>/docsy
+
+    # v1.0.0 — single-stage
+    docker buildx build --platform linux/amd64,linux/arm64 \
+        -f Dockerfile.v1 -t "$APP:v1.0.0" --push .
+
+    # v2.0.0 — multi-stage + latest, built and pushed together (same digest)
+    docker buildx build --platform linux/amd64,linux/arm64 \
+        -f Dockerfile.v2 -t "$APP:v2.0.0" -t "$APP:latest" --push .
+
+Verify your work
+----------------
+
+.. code-block:: bash
+    :linenos:
+
+    # Both architectures present under each tag?
+    docker buildx imagetools inspect "$APP:v2.0.0"
+    docker buildx imagetools inspect "$APP:latest"     # should show the same digest as v2.0.0
+
+    # Runs and serves the site? (adjust the port to your web server)
+    docker run -d --name docsy -p 8080:8080 "$APP:v2.0.0"
+    curl -s localhost:8080/ | grep -i "Welcome to Docsy"
+
+    # Final stage is non-root?
+    docker inspect -f '{{.Config.User}}' "$APP:v2.0.0"   # must be a non-root user, not empty/0
+    #   (images that ship a shell can also confirm at runtime:)
+    #   docker run --rm --entrypoint sh "$APP:v2.0.0" -c 'id'
+
+    # How much smaller is v2 than v1?
+    docker image ls "$APP"
+
+    docker rm -f docsy
+
+Optionally, exercise the runtime hardening from the security module — a hardened
+static server needs very little:
+
+.. code-block:: bash
+
+    docker run -d --name docsy -p 8080:8080 \
+        --read-only --tmpfs /tmp --tmpfs /var/cache/nginx --tmpfs /var/run \
+        --cap-drop ALL --security-opt no-new-privileges \
+        "$APP:v2.0.0"
+
+Acceptance checklist
+--------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 8 60 32
+
+   * - Done
+     - Requirement
+     - How it is checked
+   * - ☐
+     - ``v1.0.0`` builds and serves Docsy
+     - ``curl`` returns the site homepage
+   * - ☐
+     - ``v2.0.0`` uses a multi-stage build; no build toolchain in the final image
+     - ``docker history``: no uv/Sphinx/apt layers
+   * - ☐
+     - ``v2.0.0`` final stage runs as non-root
+     - ``.Config.User`` is non-root; ``id`` is not uid 0
+   * - ☐
+     - ``v2.0.0`` is substantially smaller than ``v1.0.0``
+     - ``docker image ls`` size comparison
+   * - ☐
+     - ``v1.0.0``, ``v2.0.0`` and ``latest`` exist on Docker Hub
+     - repository tag list
+   * - ☐
+     - ``latest`` and ``v2.0.0`` are the same image
+     - identical digests in ``imagetools inspect``
+   * - ☐
+     - every tag is multi-arch (amd64 + arm64)
+     - ``imagetools inspect`` lists both platforms
+
+.. note::
+
+   **Grading is on the published images, not on the exact wording of your
+   Dockerfiles.** Two students may choose different web servers or base images and
+   both be fully correct, as long as the acceptance checks pass.
+
+.. warning::
+
+   Never bake secrets (Docker Hub tokens, SSH keys) into an image or commit them to
+   the repo. Authenticate interactively with ``docker login``, and log out with
+   ``docker logout`` on shared machines. Treat any access token as write-scoped to
+   your own namespace only.
+
+.. seealso::
+
+   #. `Docsy repository <https://github.com/purduecyan/docsy>`_
+   #. `Multi-stage builds <https://docs.docker.com/build/building/multi-stage/>`_
+   #. `Multi-platform images with Buildx <https://docs.docker.com/build/building/multi-platform/>`_
+   #. `Sphinx documentation <https://www.sphinx-doc.org/>`_
+   #. `uv — Python package manager <https://docs.astral.sh/uv/>`_
+   
